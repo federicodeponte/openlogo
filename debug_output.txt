@@ -1,0 +1,29 @@
+Script started
+Current directory: /Users/federicodeponte/Documents/crawl4ai
+Current working directory: /Users/federicodeponte/Documents/crawl4ai
+Importing LogoCrawler...
+Traceback (most recent call last):
+  File "/Users/federicodeponte/Documents/crawl4ai/test_logo_crawler.py", line 17, in <module>
+    from fede_crawl4ai.logo_crawler import LogoCrawler
+  File "/Users/federicodeponte/Documents/crawl4ai/fede_crawl4ai/__init__.py", line 1, in <module>
+    from .logo_crawler import LogoCrawler
+  File "/Users/federicodeponte/Documents/crawl4ai/fede_crawl4ai/logo_crawler.py", line 11, in <module>
+    import cairosvg
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/cairosvg/__init__.py", line 26, in <module>
+    from . import surface  # noqa isort:skip
+    ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/cairosvg/surface.py", line 9, in <module>
+    import cairocffi as cairo
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/cairocffi/__init__.py", line 60, in <module>
+    cairo = dlopen(
+        ffi, ('cairo-2', 'cairo', 'libcairo-2'),
+        ('libcairo.so.2', 'libcairo.2.dylib', 'libcairo-2.dll'))
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/cairocffi/__init__.py", line 57, in dlopen
+    raise OSError(error_message)  # pragma: no cover
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: no library called "cairo-2" was found
+no library called "cairo" was found
+no library called "libcairo-2" was found
+cannot load library 'libcairo.so.2': dlopen(libcairo.so.2, 0x0002): tried: 'libcairo.so.2' (no such file), '/System/Volumes/Preboot/Cryptexes/OSlibcairo.so.2' (no such file), '/usr/lib/libcairo.so.2' (no such file, not in dyld cache), 'libcairo.so.2' (no such file).  Additionally, ctypes.util.find_library() did not manage to locate a library called 'libcairo.so.2'
+cannot load library 'libcairo.2.dylib': dlopen(libcairo.2.dylib, 0x0002): tried: 'libcairo.2.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OSlibcairo.2.dylib' (no such file), '/usr/lib/libcairo.2.dylib' (no such file, not in dyld cache), 'libcairo.2.dylib' (no such file).  Additionally, ctypes.util.find_library() did not manage to locate a library called 'libcairo.2.dylib'
+cannot load library 'libcairo-2.dll': dlopen(libcairo-2.dll, 0x0002): tried: 'libcairo-2.dll' (no such file), '/System/Volumes/Preboot/Cryptexes/OSlibcairo-2.dll' (no such file), '/usr/lib/libcairo-2.dll' (no such file, not in dyld cache), 'libcairo-2.dll' (no such file).  Additionally, ctypes.util.find_library() did not manage to locate a library called 'libcairo-2.dll'

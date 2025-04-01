@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fede_crawl4ai"
+version = "0.1.0"
+description = "A web crawler for logo detection using GPT-4-vision"
+authors = [
+    {name = "Federico De Ponte", email = "federico.deponte@gmail.com"},
+]
+dependencies = [
+    "aiohttp>=3.8.0",
+    "beautifulsoup4>=4.9.3",
+    "Pillow>=8.0.0",
+    "pydantic>=1.8.0",
+    "rich>=10.0.0",
+    "cairosvg>=2.7.0",
+]
+readme = "README.md"
+requires-python = ">=3.8"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fede_crawl4ai"] 
