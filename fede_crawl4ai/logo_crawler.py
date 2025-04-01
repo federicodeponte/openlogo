@@ -19,6 +19,8 @@ from pydantic import BaseModel
 import re
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
+from .logo_detection import LogoDetectionStrategies, LogoCandidate
+
 def allowSelfSignedHttps(allowed):
     if allowed and not os.environ.get('PYTHONHTTPSVERIFY', '') and getattr(ssl, '_create_unverified_context', None):
         ssl._create_default_https_context = ssl._create_unverified_context
@@ -32,8 +34,9 @@ class LogoResult(BaseModel):
     page_url: str
     image_hash: str
     timestamp: datetime
-    is_header: bool = False  # New field to track if logo is from header/nav
-    rank_score: float = 0.0  # New field for the ranking score
+    is_header: bool = False
+    rank_score: float = 0.0
+    detection_scores: Dict[str, Dict[str, float]] = {}
 
 class ImageCache:
     def __init__(self, cache_duration: timedelta = timedelta(days=1)):
@@ -51,13 +54,14 @@ class ImageCache:
         self.cache[image_hash] = result
 
 class LogoCrawler:
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, twitter_api_key: Optional[str] = None):
         self.api_key = api_key or "COIEsidMCl1pXiM33rWGJTNeF2fyheRJXc9FaYFqCEidCYwQPGaHJQQJ99BAACPV0roXJ3w3AAABACOGB3cH"
         if not self.api_key:
             raise ValueError("API key is required")
         
-        # Initialize image cache
+        # Initialize image cache and detection strategies
         self.image_cache = ImageCache()
+        self.detection_strategies = LogoDetectionStrategies(twitter_api_key)
         
         # Minimum image dimensions
         self.min_width = 32
@@ -127,8 +131,8 @@ class LogoCrawler:
         
         return ' '.join(filtered_lines)
 
-    async def analyze_image_with_azure(self, image_base64: str, image_url: str, page_url: str) -> Optional[LogoResult]:
-        """Analyze an image using Azure OpenAI gpt-4o-mini."""
+    async def analyze_image_with_azure(self, image_base64: str, image_url: str, page_url: str, html_element: Optional[Tag] = None, page_html: Optional[str] = None) -> Optional[LogoResult]:
+        """Analyze an image using Azure OpenAI gpt-4o-mini and additional detection strategies."""
         url = "https://scailetech.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2023-03-15-preview"
         
         messages = [
@@ -209,13 +213,35 @@ class LogoCrawler:
                     description = self.extract_description(content)
                     print(f"Extracted description: {description}")
                     
+                    # Get additional detection scores
+                    detection_scores = {}
+                    if html_element and page_html:
+                        image_data = base64.b64decode(image_base64)
+                        domain = urlparse(page_url).netloc
+                        
+                        detection_scores['html_context'] = await self.detection_strategies.analyze_html_context(html_element, page_url)
+                        detection_scores['structural_position'] = await self.detection_strategies.analyze_structural_position(html_element, [])
+                        detection_scores['technical'] = await self.detection_strategies.analyze_image_technical(image_url, image_data)
+                        detection_scores['visual'] = await self.detection_strategies.analyze_visual_characteristics(image_data)
+                        detection_scores['url_semantics'] = await self.detection_strategies.analyze_url_semantics(image_url)
+                        detection_scores['metadata'] = await self.detection_strategies.analyze_metadata(image_data)
+                        detection_scores['social_media'] = await self.detection_strategies.analyze_social_media(domain)
+                        detection_scores['schema_markup'] = await self.detection_strategies.analyze_schema_markup(page_html)
+                        
+                        # Calculate rank score
+                        rank_score = await self.detection_strategies.get_final_score(detection_scores)
+                    else:
+                        rank_score = confidence
+                    
                     return LogoResult(
                         url=image_url,
                         confidence=confidence,
                         description=description,
                         page_url=page_url,
                         image_hash=self.get_image_hash(image_base64.encode()),
-                        timestamp=datetime.now()
+                        timestamp=datetime.now(),
+                        rank_score=rank_score,
+                        detection_scores=detection_scores
                     )
             
         except aiohttp.ClientError as e:
@@ -397,7 +423,9 @@ class LogoCrawler:
                         "description": result.description,
                         "page_url": result.page_url,
                         "image_hash": result.image_hash,
-                        "timestamp": result.timestamp.isoformat()
+                        "timestamp": result.timestamp.isoformat(),
+                        "rank_score": result.rank_score,
+                        "detection_scores": result.detection_scores
                     }
                     results_dict.append(result_dict)
                 

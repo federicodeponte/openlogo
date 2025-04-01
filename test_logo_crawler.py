@@ -17,15 +17,17 @@ sys.path.append(str(current_dir))
 print("Importing LogoCrawler...")  # Debug output
 
 async def main():
-    print("Main function started")  # Debug output
+    print("Script started")
     print(f"Current directory: {os.getcwd()}")
     
-    print("Importing LogoCrawler...")
-    crawler = LogoCrawler()
+    print("Creating LogoCrawler instance...")
+    # You can add your Twitter API key here if you have one
+    crawler = LogoCrawler(twitter_api_key=None)
     print("LogoCrawler instance created")
     
     # Crawl website and get ranked results
-    results = await crawler.crawl_website("https://www.elenra.de")
+    print("\nStarting crawl of www.enter.de...")
+    results = await crawler.crawl_website("https://www.enter.de")
     
     # Save results to JSON
     output_data = [
@@ -37,7 +39,8 @@ async def main():
             "image_hash": result.image_hash,
             "timestamp": result.timestamp.isoformat(),
             "is_header": result.is_header,
-            "rank_score": result.rank_score
+            "rank_score": result.rank_score,
+            "detection_scores": result.detection_scores
         }
         for result in results
     ]
@@ -65,14 +68,28 @@ async def main():
     print("File synced")
     print("Results saved successfully")
     
-    # Verify file exists and size
-    print(f"File exists: {os.path.exists(output_file)}")
-    print(f"File size: {os.path.getsize(output_file)} bytes")
-    with open(output_file, 'r') as f:
-        content = f.read()
-        print(f"File content length: {len(content)} bytes")
+    # Print summary of results
+    print("\nResults Summary:")
+    print(f"Total logos found: {len(results)}")
     
-    print("Script completed")
+    # Sort by rank score
+    sorted_results = sorted(results, key=lambda x: x.rank_score, reverse=True)
+    
+    print("\nTop 3 most likely logos:")
+    for i, result in enumerate(sorted_results[:3], 1):
+        location = "header/navigation" if result.is_header else "main content"
+        print(f"\n{i}. Logo from {location}")
+        print(f"URL: {result.url}")
+        print(f"Confidence: {result.confidence}")
+        print(f"Rank Score: {result.rank_score}")
+        print(f"Description: {result.description}")
+        if result.detection_scores:
+            print("\nDetection Scores:")
+            for category, scores in result.detection_scores.items():
+                avg_score = sum(scores.values()) / len(scores)
+                print(f"- {category}: {avg_score:.2f}")
+    
+    print("\nScript completed")
 
 if __name__ == "__main__":
     print("Starting main...")  # Debug output
