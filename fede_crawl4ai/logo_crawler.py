@@ -32,6 +32,8 @@ class LogoResult(BaseModel):
     page_url: str
     image_hash: str
     timestamp: datetime
+    is_header: bool = False  # New field to track if logo is from header/nav
+    rank_score: float = 0.0  # New field for the ranking score
 
 class ImageCache:
     def __init__(self, cache_duration: timedelta = timedelta(days=1)):
@@ -430,3 +432,176 @@ class LogoCrawler:
                 traceback.print_exc()
         
         return logo_results 
+
+    async def analyze_header_nav_elements(self, soup: BeautifulSoup, base_url: str) -> List[str]:
+        """Extract image URLs from header and navigation elements."""
+        header_selectors = [
+            'header', 
+            'nav',
+            '[role="banner"]',
+            '.header',
+            '.nav',
+            '#header',
+            '#nav',
+            '.navbar',
+            '.site-header',
+            '.main-header'
+        ]
+        
+        header_images = set()
+        for selector in header_selectors:
+            elements = soup.select(selector)
+            for element in elements:
+                # Find all images in this header/nav element
+                for img in element.find_all('img'):
+                    src = img.get('src')
+                    if src:
+                        full_url = urljoin(base_url, src)
+                        header_images.add(full_url)
+                        
+                # Find all SVG elements
+                for svg in element.find_all('svg'):
+                    # If SVG has an image
+                    for image in svg.find_all('image'):
+                        href = image.get('href') or image.get('xlink:href')
+                        if href:
+                            full_url = urljoin(base_url, href)
+                            header_images.add(full_url)
+        
+        return list(header_images)
+
+    async def rank_logos(self, logos: List[LogoResult]) -> List[LogoResult]:
+        """Use gpt-4o-mini to rank logos based on confidence and description."""
+        if not logos:
+            return []
+
+        url = "https://scailetech.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2023-03-15-preview"
+        
+        # Prepare the prompt with all logo information
+        logo_descriptions = []
+        for i, logo in enumerate(logos, 1):
+            location = "header/navigation" if logo.is_header else "main content"
+            logo_descriptions.append(f"Logo {i}:\n- Location: {location}\n- Confidence: {logo.confidence}\n- Description: {logo.description}")
+        
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a logo ranking assistant. Analyze the provided logos and rank them based on their likelihood of being the main company logo. Consider:\n1. Location (header/nav logos are more likely)\n2. Confidence score\n3. Description (looking for company name, branding elements)\n4. Professional design indicators"
+            },
+            {
+                "role": "user",
+                "content": f"Rank these logos from most to least likely to be the main company logo. For each logo, provide a score from 0-1 and brief explanation:\n\n{chr(10).join(logo_descriptions)}"
+            }
+        ]
+
+        data = {
+            "messages": messages,
+            "max_tokens": 500
+        }
+
+        headers = {
+            'Content-Type': 'application/json',
+            'api-key': self.api_key
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=data, headers=headers) as response:
+                    if response.status != 200:
+                        print(f"Error ranking logos: {await response.text()}")
+                        return logos
+
+                    result = await response.json()
+                    content = result['choices'][0]['message']['content']
+                    
+                    # Extract ranking scores using regex
+                    for i, logo in enumerate(logos, 1):
+                        pattern = f"Logo {i}.*?score:?\s*(\d*\.?\d+)"
+                        match = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
+                        if match:
+                            try:
+                                logo.rank_score = float(match.group(1))
+                            except ValueError:
+                                logo.rank_score = 0.0
+                        
+                    # Sort logos by rank_score in descending order
+                    return sorted(logos, key=lambda x: x.rank_score, reverse=True)
+
+        except Exception as e:
+            print(f"Error during logo ranking: {e}")
+            return logos
+
+    async def crawl_website(self, url: str) -> List[LogoResult]:
+        """Crawl a website and find logos."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        return []
+                    
+                    html = await response.text()
+                    soup = BeautifulSoup(html, 'html.parser')
+                    
+                    # First, get header/nav images
+                    header_images = await self.analyze_header_nav_elements(soup, url)
+                    
+                    # Then get all other images
+                    all_images = set()
+                    for img in soup.find_all('img'):
+                        src = img.get('src')
+                        if src:
+                            full_url = urljoin(url, src)
+                            all_images.add(full_url)
+                    
+                    for svg in soup.find_all('svg'):
+                        for image in svg.find_all('image'):
+                            href = image.get('href') or image.get('xlink:href')
+                            if href:
+                                full_url = urljoin(url, href)
+                                all_images.add(full_url)
+                    
+                    # Analyze all images
+                    results = []
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TaskProgressColumn()
+                    ) as progress:
+                        task = progress.add_task("Crawling pages...", total=len(all_images))
+                        
+                        for image_url in all_images:
+                            result = await self.analyze_image(image_url, url)
+                            if result:
+                                # Mark if image is from header/nav
+                                result.is_header = image_url in header_images
+                                results.append(result)
+                            progress.advance(task)
+                    
+                    print(f"Crawl completed. Found {len(results)} results\n")
+                    
+                    if results:
+                        # Rank the logos
+                        ranked_results = await self.rank_logos(results)
+                        
+                        print("\nFound logos (ranked by likelihood of being main company logo):\n")
+                        for result in ranked_results:
+                            location = "header/navigation" if result.is_header else "main content"
+                            print(f"URL: {result.url}")
+                            print(f"Location: {location}")
+                            print(f"Confidence: {result.confidence}")
+                            print(f"Rank Score: {result.rank_score}")
+                            print(f"Description: {result.description}")
+                            print(f"Page URL: {result.page_url}")
+                            print("-" * 50 + "\n")
+                        
+                        return ranked_results
+                    
+                    return []
+                    
+        except aiohttp.ClientError as e:
+            print(f"Error crawling website: {e}")
+            return []
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            return [] 
