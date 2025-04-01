@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "fede_crawl4ai"
+name = "fede-crawl4ai"
 version = "0.1.0"
-description = "A web crawler for logo detection using GPT-4-vision"
+description = "A web crawler for logo detection using gpt-4o-mini"
 authors = [
     {name = "Federico De Ponte", email = "federico.deponte@gmail.com"},
 ]

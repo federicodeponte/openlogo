@@ -71,7 +71,7 @@ class LogoCrawler:
         return width >= self.min_width and height >= self.min_height
 
     def extract_confidence_score(self, content: str) -> float:
-        """Extract confidence score from GPT-4 response using various patterns."""
+        """Extract confidence score from gpt-4o-mini response using various patterns."""
         # Try different patterns to find confidence score
         patterns = [
             r"confidence score:\s*(\d*\.?\d+)",  # "Confidence Score: 0.9"
@@ -105,7 +105,7 @@ class LogoCrawler:
         return 0.0
 
     def extract_description(self, content: str) -> str:
-        """Extract description from GPT-4 response."""
+        """Extract description from gpt-4o-mini response."""
         # Try to find description after "Description:" marker
         if "description:" in content.lower():
             parts = content.split("Description:", 1)
@@ -126,7 +126,7 @@ class LogoCrawler:
         return ' '.join(filtered_lines)
 
     async def analyze_image_with_azure(self, image_base64: str, image_url: str, page_url: str) -> Optional[LogoResult]:
-        """Analyze an image using Azure OpenAI GPT-4-vision."""
+        """Analyze an image using Azure OpenAI gpt-4o-mini."""
         url = "https://scailetech.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2023-03-15-preview"
         
         messages = [
@@ -227,7 +227,7 @@ class LogoCrawler:
             return None
         
     async def analyze_image(self, image_url: str, page_url: str) -> Optional[LogoResult]:
-        """Analyze an image using GPT-4-vision to determine if it's a logo."""
+        """Analyze an image using gpt-4o-mini to determine if it's a logo."""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as response:
