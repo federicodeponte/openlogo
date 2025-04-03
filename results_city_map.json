@@ -1,0 +1,83 @@
+[
+  {
+    "url": "https://city-map.de/static/img/cm.com/city-map-com-logo.png",
+    "alt_text": "city-map.com",
+    "title": "city-map.com",
+    "class_name": "['cm-logo']",
+    "id": "",
+    "src_attribute": "/static/img/cm.com/city-map-com-logo.png",
+    "dimensions": {
+      "width": 0,
+      "height": 0
+    },
+    "location": "header-class",
+    "page_url": "https://city-map.de",
+    "parent_classes": [
+      "cmcom-header"
+    ],
+    "parent_ids": [],
+    "timestamp": "2025-04-03T15:29:33.947143"
+  },
+  {
+    "url": "https://city-map.de/static/icons/pic/reg/fl_de.gif",
+    "alt_text": "",
+    "title": "",
+    "class_name": "['flag-active-language']",
+    "id": "",
+    "src_attribute": "/static/icons/pic/reg/fl_de.gif",
+    "dimensions": {
+      "width": 16,
+      "height": 11
+    },
+    "location": "header-class",
+    "page_url": "https://city-map.de",
+    "parent_classes": [
+      "btn",
+      "dropdown-toggle",
+      "language-selection",
+      "signup-tip",
+      "btn-group",
+      "btn-toolbar",
+      "cmcom-toolbar",
+      "cmcom-header"
+    ],
+    "parent_ids": [],
+    "timestamp": "2025-04-03T15:29:33.947166"
+  },
+  {
+    "url": "https://city-map.de/static/img/cm.com/city-map-com-logo.png",
+    "alt_text": "city-map.com",
+    "title": "city-map.com",
+    "class_name": "['cm-logo']",
+    "id": "",
+    "src_attribute": "/static/img/cm.com/city-map-com-logo.png",
+    "dimensions": {
+      "width": 0,
+      "height": 0
+    },
+    "location": "content",
+    "page_url": "https://city-map.de",
+    "parent_classes": [
+      "cmcom-header"
+    ],
+    "parent_ids": [],
+    "timestamp": "2025-04-03T15:29:33.947172"
+  },
+  {
+    "url": "https://analytics.city-map.de/piwik.php?idsite=873",
+    "alt_text": "",
+    "title": "",
+    "class_name": "[]",
+    "id": "",
+    "src_attribute": "//analytics.city-map.de/piwik.php?idsite=873",
+    "dimensions": {
+      "width": 0,
+      "height": 0
+    },
+    "location": "content",
+    "page_url": "https://city-map.de",
+    "parent_classes": [],
+    "parent_ids": [],
+    "timestamp": "2025-04-03T15:29:33.947177"
+  }
+]
