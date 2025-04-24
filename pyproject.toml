@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "fede-crawl4ai"
 version = "0.1.0"
-description = "A web crawler for logo detection using gpt-4o-mini"
+description = "A web crawler for logo detection using gpt-4o-mini. Note: Requires Cairo system library to be installed separately."
 authors = [
     {name = "Federico De Ponte", email = "federico.deponte@gmail.com"},
 ]

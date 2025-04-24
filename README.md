@@ -14,6 +14,24 @@ A web crawler for logo detection using gpt-4o-mini. This tool crawls websites an
 
 ## Installation
 
+### System Dependencies
+
+Before installing the Python package, you need to install some system dependencies:
+
+#### macOS
+```bash
+brew install cairo
+```
+
+#### Ubuntu/Debian
+```bash
+sudo apt-get install libcairo2-dev
+```
+
+#### Windows
+Download and install Cairo from: https://www.cairographics.org/download/
+
+### Python Package
 ```bash
 pip install -e .
 ```
