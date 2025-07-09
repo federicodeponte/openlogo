@@ -54,22 +54,25 @@ class ImageCache:
         self.cache[image_hash] = result
 
 class LogoCrawler:
-    def __init__(self, api_key: Optional[str] = None, twitter_api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, twitter_api_key: Optional[str] = None, use_azure: bool = False):
         """
         Initialize the LogoCrawler.
         
         Args:
-            api_key: Azure OpenAI API key. Required for logo detection.
-                     Get your API key from: https://portal.azure.com/
+            api_key: OpenAI API key (Azure or regular). Required for logo detection.
+                     - For Azure OpenAI: Get your API key from https://portal.azure.com/
+                     - For regular OpenAI: Get your API key from https://platform.openai.com/
             twitter_api_key: Optional Twitter API key for social media analysis
+            use_azure: Set to True if using Azure OpenAI, False for regular OpenAI (default: False)
         """
         if not api_key:
             raise ValueError(
-                "Azure OpenAI API key is required. "
+                "OpenAI API key is required. "
                 "Please provide your API key when initializing LogoCrawler. "
-                "Get your API key from: https://portal.azure.com/"
+                "Get your API key from: https://platform.openai.com/ (regular) or https://portal.azure.com/ (Azure)"
             )
         self.api_key = api_key
+        self.use_azure = use_azure
         
         # Initialize image cache and detection strategies
         self.image_cache = ImageCache()
@@ -143,7 +146,14 @@ class LogoCrawler:
         
         return ' '.join(filtered_lines)
 
-    async def analyze_image_with_azure(self, image_base64: str, image_url: str, page_url: str, html_element: Optional[Tag] = None, page_html: Optional[str] = None) -> Optional[LogoResult]:
+    async def analyze_image_with_openai(self, image_base64: str, image_url: str, page_url: str, html_element: Optional[Tag] = None, page_html: Optional[str] = None) -> Optional[LogoResult]:
+        """Analyze an image using OpenAI API (regular or Azure) and additional detection strategies."""
+        if self.use_azure:
+            return await self._analyze_image_with_azure(image_base64, image_url, page_url, html_element, page_html)
+        else:
+            return await self._analyze_image_with_regular_openai(image_base64, image_url, page_url, html_element, page_html)
+
+    async def _analyze_image_with_azure(self, image_base64: str, image_url: str, page_url: str, html_element: Optional[Tag] = None, page_html: Optional[str] = None) -> Optional[LogoResult]:
         """Analyze an image using Azure OpenAI gpt-4o-mini and additional detection strategies."""
         url = "https://scailetech.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2023-03-15-preview"
         
@@ -174,6 +184,130 @@ class LogoCrawler:
         headers = {
             'Content-Type': 'application/json',
             'api-key': self.api_key
+        }
+
+        try:
+            print(f"\nAnalyzing image: {image_url}")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=data, headers=headers) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        print(f"API Error ({response.status}): {error_text}")
+                        return None
+                    
+                    try:
+                        result = await response.json()
+                        print(f"API Response: {json.dumps(result, indent=2)}")
+                    except json.JSONDecodeError as e:
+                        print(f"Error decoding JSON response: {e}")
+                        response_text = await response.text()
+                        print(f"Raw response: {response_text}")
+                        return None
+                    
+                    if not result.get('choices'):
+                        print(f"Warning: No 'choices' in API response")
+                        return None
+                    
+                    if not result['choices']:
+                        print(f"Warning: Empty 'choices' array in API response")
+                        return None
+                    
+                    if not result['choices'][0].get('message'):
+                        print(f"Warning: No 'message' in first choice")
+                        return None
+                    
+                    if not result['choices'][0]['message'].get('content'):
+                        print(f"Warning: No 'content' in message")
+                        return None
+                    
+                    content = result['choices'][0]['message']['content']
+                    print(f"Content from API: {content}")
+                    
+                    if content.lower() == "null":
+                        print("Content is 'null', skipping image")
+                        return None
+                    
+                    # Extract confidence score using the new method
+                    confidence = self.extract_confidence_score(content)
+                    print(f"Extracted confidence score: {confidence}")
+                    
+                    # Extract description using the new method
+                    description = self.extract_description(content)
+                    print(f"Extracted description: {description}")
+                    
+                    # Get additional detection scores
+                    detection_scores = {}
+                    if html_element and page_html:
+                        image_data = base64.b64decode(image_base64)
+                        domain = urlparse(page_url).netloc
+                        
+                        detection_scores['html_context'] = await self.detection_strategies.analyze_html_context(html_element, page_url)
+                        detection_scores['structural_position'] = await self.detection_strategies.analyze_structural_position(html_element, [])
+                        detection_scores['technical'] = await self.detection_strategies.analyze_image_technical(image_url, image_data)
+                        detection_scores['visual'] = await self.detection_strategies.analyze_visual_characteristics(image_data)
+                        detection_scores['url_semantics'] = await self.detection_strategies.analyze_url_semantics(image_url)
+                        detection_scores['metadata'] = await self.detection_strategies.analyze_metadata(image_data)
+                        detection_scores['social_media'] = await self.detection_strategies.analyze_social_media(domain)
+                        detection_scores['schema_markup'] = await self.detection_strategies.analyze_schema_markup(page_html)
+                        
+                        # Calculate rank score
+                        rank_score = await self.detection_strategies.get_final_score(detection_scores)
+                    else:
+                        rank_score = confidence
+                    
+                    return LogoResult(
+                        url=image_url,
+                        confidence=confidence,
+                        description=description,
+                        page_url=page_url,
+                        image_hash=self.get_image_hash(image_base64.encode()),
+                        timestamp=datetime.now(),
+                        rank_score=rank_score,
+                        detection_scores=detection_scores
+                    )
+            
+        except aiohttp.ClientError as e:
+            print(f"HTTP Error analyzing image {image_url}: {e}")
+            return None
+        except Exception as e:
+            print(f"Error analyzing image {image_url}: {e}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    async def _analyze_image_with_regular_openai(self, image_base64: str, image_url: str, page_url: str, html_element: Optional[Tag] = None, page_html: Optional[str] = None) -> Optional[LogoResult]:
+        """Analyze an image using regular OpenAI API and additional detection strategies."""
+        url = "https://api.openai.com/v1/chat/completions"
+        
+        messages = [
+            {"role": "system", "content": "You are a logo detection assistant. Analyze the image and determine if it's a logo. If it is, provide a confidence score (0-1) and description in this format: 'Confidence Score: X.XX\nDescription: ...'. If not, return 'null'."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Is this image a logo? If yes, provide a confidence score (0-1) and a brief description of what makes it a logo. Format your response as 'Confidence Score: X.XX\nDescription: ...'. If no, return null."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{image_base64}"
+                        }
+                    }
+                ]
+            }
+        ]
+
+        data = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 300
+        }
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.api_key}'
         }
 
         try:
@@ -302,8 +436,8 @@ class LogoCrawler:
                     image.save(buffered, format="PNG")
                     image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                     
-                    # Analyze with Azure OpenAI
-                    result = await self.analyze_image_with_azure(image_base64, image_url, page_url)
+                    # Analyze with OpenAI (Azure or regular)
+                    result = await self.analyze_image_with_openai(image_base64, image_url, page_url)
                     
                     if result:
                         # Cache the result

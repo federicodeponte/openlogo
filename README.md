@@ -42,7 +42,9 @@ pip install -e .
 
 Before using this tool, you need:
 
-1. **Azure OpenAI API Key**: Get your API key from the [Azure Portal](https://portal.azure.com/)
+1. **OpenAI API Key**: Get your API key from:
+   - **Regular OpenAI**: [OpenAI Platform](https://platform.openai.com/) (recommended for most users)
+   - **Azure OpenAI**: [Azure Portal](https://portal.azure.com/)
 2. **System Dependencies**: Install Cairo as described in the Installation section above
 
 ## Usage
@@ -50,8 +52,11 @@ Before using this tool, you need:
 ```python
 from fede_crawl4ai import LogoCrawler
 
-# Create a crawler instance with your Azure OpenAI API key
-crawler = LogoCrawler(api_key="your_azure_openai_api_key_here")
+# Create a crawler instance with your OpenAI API key
+crawler = LogoCrawler(api_key="your_openai_api_key_here")
+
+# For Azure OpenAI, use:
+# crawler = LogoCrawler(api_key="your_azure_api_key_here", use_azure=True)
 
 # Crawl a website for logos
 results = await crawler.crawl_website("https://example.com")
@@ -59,20 +64,29 @@ results = await crawler.crawl_website("https://example.com")
 # Results are saved to results.json
 ```
 
-**Important**: You must provide your own Azure OpenAI API key. The tool will not work without it.
+**Important**: You must provide your own OpenAI API key. The tool will not work without it.
 
 ## Configuration
 
 ### Environment Variables (Optional)
 You can also set your API key as an environment variable:
 ```bash
+# For regular OpenAI
+export OPENAI_API_KEY="your_api_key_here"
+
+# For Azure OpenAI
 export AZURE_OPENAI_API_KEY="your_api_key_here"
 ```
 
 Then use it in your code:
 ```python
 import os
-crawler = LogoCrawler(api_key=os.getenv("AZURE_OPENAI_API_KEY"))
+
+# For regular OpenAI (default)
+crawler = LogoCrawler(api_key=os.getenv("OPENAI_API_KEY"))
+
+# For Azure OpenAI
+crawler = LogoCrawler(api_key=os.getenv("AZURE_OPENAI_API_KEY"), use_azure=True)
 ```
 
 ## Output Format
