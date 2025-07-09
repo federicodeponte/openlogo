@@ -55,9 +55,21 @@ class ImageCache:
 
 class LogoCrawler:
     def __init__(self, api_key: Optional[str] = None, twitter_api_key: Optional[str] = None):
-        self.api_key = api_key or "COIEsidMCl1pXiM33rWGJTNeF2fyheRJXc9FaYFqCEidCYwQPGaHJQQJ99BAACPV0roXJ3w3AAABACOGB3cH"
-        if not self.api_key:
-            raise ValueError("API key is required")
+        """
+        Initialize the LogoCrawler.
+        
+        Args:
+            api_key: Azure OpenAI API key. Required for logo detection.
+                     Get your API key from: https://portal.azure.com/
+            twitter_api_key: Optional Twitter API key for social media analysis
+        """
+        if not api_key:
+            raise ValueError(
+                "Azure OpenAI API key is required. "
+                "Please provide your API key when initializing LogoCrawler. "
+                "Get your API key from: https://portal.azure.com/"
+            )
+        self.api_key = api_key
         
         # Initialize image cache and detection strategies
         self.image_cache = ImageCache()
