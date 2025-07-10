@@ -29,6 +29,15 @@ except ImportError:
     print("Warning: rembg not installed. Background removal will be skipped.")
     print("Install with: pip install rembg")
 
+# Try to import supabase for cloud storage
+try:
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    SUPABASE_AVAILABLE = False
+    print("Warning: supabase not installed. Cloud storage will be skipped.")
+    print("Install with: pip install supabase")
+
 from .logo_detection import LogoDetectionStrategies, LogoCandidate
 
 def allowSelfSignedHttps(allowed):
@@ -63,8 +72,52 @@ class ImageCache:
     def set(self, image_hash: str, result: LogoResult):
         self.cache[image_hash] = result
 
+class CloudStorage:
+    def __init__(self, supabase_url: Optional[str] = None, supabase_key: Optional[str] = None):
+        """Initialize cloud storage for uploading background-removed images."""
+        self.supabase_url = supabase_url
+        self.supabase_key = supabase_key
+        self.client: Optional[Client] = None
+        
+        if SUPABASE_AVAILABLE and supabase_url and supabase_key:
+            try:
+                self.client = create_client(supabase_url, supabase_key)
+                print("✅ Supabase cloud storage initialized")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Supabase: {e}")
+                self.client = None
+        else:
+            print("⚠️  Supabase not configured - images will be stored locally only")
+    
+    async def upload_image(self, image_data: bytes, filename: str) -> Optional[str]:
+        """Upload image to cloud storage and return public URL."""
+        if not self.client:
+            return None
+            
+        try:
+            # Upload to Supabase storage
+            bucket_name = "logo-images"
+            file_path = f"background-removed/{filename}"
+            
+            # Ensure bucket exists (this would need to be created manually in Supabase dashboard)
+            result = self.client.storage.from_(bucket_name).upload(
+                path=file_path,
+                file=image_data,
+                file_options={"content-type": "image/png"}
+            )
+            
+            # Get public URL
+            public_url = self.client.storage.from_(bucket_name).get_public_url(file_path)
+            return public_url
+            
+        except Exception as e:
+            print(f"⚠️  Failed to upload to cloud storage: {e}")
+            return None
+
 class LogoCrawler:
-    def __init__(self, api_key: Optional[str] = None, twitter_api_key: Optional[str] = None, use_azure: bool = False):
+    def __init__(self, api_key: Optional[str] = None, twitter_api_key: Optional[str] = None, 
+                 use_azure: bool = False, supabase_url: Optional[str] = None, 
+                 supabase_key: Optional[str] = None):
         """
         Initialize the LogoCrawler.
         
@@ -74,6 +127,8 @@ class LogoCrawler:
                      - For regular OpenAI: Get your API key from https://platform.openai.com/
             twitter_api_key: Optional Twitter API key for social media analysis
             use_azure: Set to True if using Azure OpenAI, False for regular OpenAI (default: False)
+            supabase_url: Optional Supabase URL for cloud storage of background-removed images
+            supabase_key: Optional Supabase key for cloud storage
         """
         if not api_key:
             raise ValueError(
@@ -84,13 +139,25 @@ class LogoCrawler:
         self.api_key = api_key
         self.use_azure = use_azure
         
-        # Initialize image cache and detection strategies
+        # Initialize image cache, detection strategies, and cloud storage
         self.image_cache = ImageCache()
         self.detection_strategies = LogoDetectionStrategies(twitter_api_key)
+        self.cloud_storage = CloudStorage(supabase_url, supabase_key)
         
         # Minimum image dimensions
         self.min_width = 32
         self.min_height = 32
+        
+        # Keywords that indicate non-company logos (social media, generic icons, etc.)
+        self.non_company_logo_keywords = [
+            'facebook', 'twitter', 'x.com', 'instagram', 'linkedin', 'youtube', 'tiktok',
+            'social media', 'share', 'like', 'follow', 'icon', 'button', 'arrow',
+            'menu', 'hamburger', 'search', 'magnifying glass', 'close', 'x mark',
+            'play', 'pause', 'stop', 'volume', 'mute', 'settings', 'gear',
+            'user', 'profile', 'account', 'login', 'logout', 'sign in', 'sign up',
+            'cart', 'shopping', 'bag', 'heart', 'favorite', 'star', 'rating',
+            'tag', 'price', 'discount', 'sale', 'new', 'hot', 'trending'
+        ]
         
     def get_image_hash(self, image_data: bytes) -> str:
         """Generate a hash for an image to use as cache key."""
@@ -100,6 +167,28 @@ class LogoCrawler:
         """Check if image dimensions are suitable for logo detection."""
         width, height = image.size
         return width >= self.min_width and height >= self.min_height
+    
+    def is_company_logo(self, description: str, url: str) -> bool:
+        """Check if the logo is likely a company logo (not social media, generic icons, etc.)."""
+        if not description:
+            return True  # If no description, assume it's a company logo
+        
+        description_lower = description.lower()
+        url_lower = url.lower()
+        
+        # Check for non-company logo keywords
+        for keyword in self.non_company_logo_keywords:
+            if keyword in description_lower or keyword in url_lower:
+                return False
+        
+        # Check for social media domains in URL
+        social_domains = ['facebook.com', 'twitter.com', 'x.com', 'instagram.com', 
+                         'linkedin.com', 'youtube.com', 'tiktok.com']
+        for domain in social_domains:
+            if domain in url_lower:
+                return False
+        
+        return True
 
     def remove_background(self, image: Image.Image) -> Image.Image:
         """Remove background from image using rembg."""
@@ -936,6 +1025,11 @@ class LogoCrawler:
                                 print(f"Skipping logo with low confidence ({result.confidence}): {result.url}")
                                 continue
                             
+                            # Only process company logos (not social media, generic icons, etc.)
+                            if not self.is_company_logo(result.description, result.url):
+                                print(f"Skipping non-company logo: {result.url} - {result.description}")
+                                continue
+                            
                             # Save background-removed image
                             try:
                                 # Download the original image
@@ -948,16 +1042,23 @@ class LogoCrawler:
                                             # Remove background
                                             image_no_bg = self.remove_background(image)
                                             
-                                            # Save background-removed image
+                                            # Save background-removed image locally
                                             image_filename = f"logo_{i+1}_{result.confidence:.2f}.png"
                                             image_path = images_dir / image_filename
                                             image_no_bg.save(image_path, "PNG")
                                             
-                                            # Create URL for background-removed image
-                                            # Convert file path to URL format (assuming local server or file:// protocol)
-                                            bg_image_url = f"file://{image_path.absolute()}"
+                                            # Convert to bytes for cloud upload
+                                            img_byte_arr = io.BytesIO()
+                                            image_no_bg.save(img_byte_arr, format='PNG')
+                                            img_bytes = img_byte_arr.getvalue()
                                             
-                                            # Add image path and URL to result
+                                            # Upload to cloud storage
+                                            cloud_url = await self.cloud_storage.upload_image(img_bytes, image_filename)
+                                            
+                                            # Create local file URL
+                                            local_file_url = f"file://{image_path.absolute()}"
+                                            
+                                            # Add image paths and URLs to result
                                             result_dict = {
                                                 "url": result.url,
                                                 "confidence": result.confidence,
@@ -969,7 +1070,8 @@ class LogoCrawler:
                                                 "detection_scores": result.detection_scores,
                                                 "is_header": result.is_header,
                                                 "background_removed_image_path": str(image_path),
-                                                "background_removed_image_url": bg_image_url
+                                                "background_removed_image_url": cloud_url if cloud_url else local_file_url,
+                                                "cloud_storage_url": cloud_url
                                             }
                                         else:
                                             # If image download fails, save without background-removed image
@@ -984,7 +1086,8 @@ class LogoCrawler:
                                                 "detection_scores": result.detection_scores,
                                                 "is_header": result.is_header,
                                                 "background_removed_image_path": None,
-                                                "background_removed_image_url": None
+                                                "background_removed_image_url": None,
+                                                "cloud_storage_url": None
                                             }
                             except Exception as e:
                                 print(f"Warning: Could not save background-removed image for {result.url}: {e}")
@@ -999,7 +1102,8 @@ class LogoCrawler:
                                     "detection_scores": result.detection_scores,
                                     "is_header": result.is_header,
                                     "background_removed_image_path": None,
-                                    "background_removed_image_url": None
+                                    "background_removed_image_url": None,
+                                    "cloud_storage_url": None
                                 }
                             
                             results_dict.append(result_dict)
@@ -1008,11 +1112,13 @@ class LogoCrawler:
                         with open(filepath, 'w') as f:
                             json.dump(results_dict, f, indent=2)
                         
-                        print(f"\n✅ {url}: Found {len(results)} logos, saved {len(results_dict)} high-confidence logos (>0.8) to {filepath}")
+                        print(f"\n✅ {url}: Found {len(results)} logos, saved {len(results_dict)} company logos (>0.8 confidence) to {filepath}")
                         if results_dict:
                             print(f"📁 Background-removed images saved to: {images_dir}")
+                            if any(r.get('cloud_storage_url') for r in results_dict):
+                                print(f"☁️  Images uploaded to cloud storage")
                         else:
-                            print(f"⚠️  No high-confidence logos found (all below 0.8 threshold)")
+                            print(f"⚠️  No company logos found (all below 0.8 threshold or non-company logos)")
                     else:
                         print(f"\n❌ {url}: No logos found")
                     
