@@ -3,6 +3,9 @@
 A web crawler for logo detection using gpt-4o-mini. This tool crawls websites and identifies logos using Azure OpenAI's vision capabilities.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://github.com/federicodeponte/crawl4logo/workflows/Tests/badge.svg)](https://github.com/federicodeponte/crawl4logo/actions)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ## Features
 
