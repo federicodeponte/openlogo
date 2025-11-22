@@ -41,4 +41,10 @@ secrets.*
 
 # Database files
 *.db
-*.sqlite 
+*.sqlite
+
+# Test coverage files
+.coverage
+htmlcov/
+coverage.xml
+.pytest_cache/ 

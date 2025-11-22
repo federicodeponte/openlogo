@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-11-22
+
+### Fixed
+- Removed `.coverage` binary file from repository (added to .gitignore)
+- Fixed regex deprecation warning in logo_crawler.py (use raw string)
+- Updated CI to run full test suite (all tests, not just unit tests)
+- Removed broken Codecov upload step (no token configured)
+- Removed broken PyPI release workflow (not yet configured)
+
+### Changed
+- CI now runs 12 tests (11 unit + 1 integration), 1 skipped
+- Cleaner repository with no binary artifacts
+
 ## [0.1.2] - 2025-11-22
 
 ### Fixed
