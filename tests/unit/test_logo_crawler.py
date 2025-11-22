@@ -35,8 +35,8 @@ class TestImageValidation:
         crawler = LogoCrawler(api_key=mock_api_key)
 
         # Create mock images with valid dimensions
-        img_large = Image.new('RGB', (100, 100))
-        img_medium = Image.new('RGB', (50, 50))
+        img_large = Image.new("RGB", (100, 100))
+        img_medium = Image.new("RGB", (50, 50))
 
         assert crawler.is_valid_image_size(img_large) is True
         assert crawler.is_valid_image_size(img_medium) is True
@@ -46,9 +46,9 @@ class TestImageValidation:
         crawler = LogoCrawler(api_key=mock_api_key)
 
         # Create mock images with invalid dimensions (smaller than min 32x32)
-        img_tiny = Image.new('RGB', (10, 10))
-        img_small = Image.new('RGB', (30, 30))
-        img_narrow = Image.new('RGB', (32, 10))
+        img_tiny = Image.new("RGB", (10, 10))
+        img_small = Image.new("RGB", (30, 30))
+        img_narrow = Image.new("RGB", (32, 10))
 
         assert crawler.is_valid_image_size(img_tiny) is False
         assert crawler.is_valid_image_size(img_small) is False
@@ -63,15 +63,15 @@ class TestExtractMethods:
         crawler = LogoCrawler(api_key=mock_api_key)
 
         # Test with standard format
-        content = 'Confidence Score: 0.95\nDescription: Test logo'
+        content = "Confidence Score: 0.95\nDescription: Test logo"
         assert crawler.extract_confidence_score(content) == 0.95
 
         # Test with alternate format
-        content = 'Confidence: 0.75'
+        content = "Confidence: 0.75"
         assert crawler.extract_confidence_score(content) == 0.75
 
         # Test with number at start
-        content = '0.85 - This is a logo'
+        content = "0.85 - This is a logo"
         assert crawler.extract_confidence_score(content) == 0.85
 
     def test_extract_confidence_score_invalid(self, mock_api_key):
@@ -82,7 +82,7 @@ class TestExtractMethods:
         assert crawler.extract_confidence_score("invalid json") == 0.0
 
         # Test with no parseable number
-        content = 'This is just text'
+        content = "This is just text"
         assert crawler.extract_confidence_score(content) == 0.0
 
     def test_extract_description_valid(self, mock_api_key):
@@ -90,23 +90,23 @@ class TestExtractMethods:
         crawler = LogoCrawler(api_key=mock_api_key)
 
         # Test with Description: marker
-        content = 'Confidence Score: 0.95\nDescription: A beautiful logo'
-        assert crawler.extract_description(content) == 'A beautiful logo'
+        content = "Confidence Score: 0.95\nDescription: A beautiful logo"
+        assert crawler.extract_description(content) == "A beautiful logo"
 
         # Test without Description marker
-        content = 'This is a company logo with blue colors'
+        content = "This is a company logo with blue colors"
         desc = crawler.extract_description(content)
-        assert 'logo' in desc.lower()
+        assert "logo" in desc.lower()
 
     def test_extract_description_filters_confidence(self, mock_api_key):
         """Test that description filters out confidence lines."""
         crawler = LogoCrawler(api_key=mock_api_key)
 
         # Test that confidence lines are filtered
-        content = 'Confidence: 0.95\nThis is the actual description'
+        content = "Confidence: 0.95\nThis is the actual description"
         desc = crawler.extract_description(content)
-        assert 'Confidence' not in desc
-        assert 'actual description' in desc
+        assert "Confidence" not in desc
+        assert "actual description" in desc
 
 
 class TestImageHash:

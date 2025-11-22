@@ -57,9 +57,11 @@ def mock_html_content():
 @pytest.fixture
 def set_env_vars(monkeypatch):
     """Set environment variables for testing."""
+
     def _set_env(**kwargs):
         for key, value in kwargs.items():
             monkeypatch.setenv(key, value)
+
     return _set_env
 
 
