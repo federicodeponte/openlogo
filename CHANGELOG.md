@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2025-11-23
+
+### Removed
+- **Removed obsolete setup.py** - File was redundant with pyproject.toml and contained outdated version (0.1.0)
+  - Project uses hatchling build backend defined in pyproject.toml
+  - setup.py had wrong package name and stale dependencies
+- **Removed requirements_test.txt** - Frozen snapshot with outdated version reference (fede-crawl4ai==0.1.0)
+  - Not used in CI (CI uses `pip install -e ".[dev]"` from pyproject.toml)
+  - README correctly instructs users to use `pip install -e .`
+
+### Changed
+- Cleaned up repository structure to use pyproject.toml as single source of truth for package metadata
+
 ## [0.1.5] - 2025-11-23
 
 ### Fixed
