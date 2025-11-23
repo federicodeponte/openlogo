@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-11-23
+
+### BREAKING CHANGES
+- **LogoCrawler.__init__() signature changed:**
+  - Added `azure_endpoint`, `azure_deployment`, `api_version` parameters
+  - Added `config` parameter to accept LogoCrawlerConfig instance
+  - Azure OpenAI now requires `azure_endpoint` parameter (no hardcoded default)
+  - Raises `ValueError` if `use_azure=True` but `azure_endpoint` not provided
+- **SSL certificate verification now always enabled:**
+  - Removed `allowSelfSignedHttps()` function (security vulnerability)
+  - SSL verification cannot be disabled
+- **Logging behavior changed:**
+  - All `print()` statements replaced with Python `logging` module
+  - Users must configure logging to see output
+  - Use `logging.basicConfig(level=logging.INFO)` to enable console output
+
+### Added
+- **Configuration management via LogoCrawlerConfig** (new module `config.py`)
+  - Type-safe configuration with Pydantic validation
+  - Support for environment variables (AZURE_OPENAI_ENDPOINT, etc.)
+  - `LogoCrawlerConfig.from_env()` method for env-based configuration
+- **Proper logging throughout the codebase**
+  - Replaced 82 print statements with structured logging
+  - Log levels: DEBUG, INFO, WARNING, ERROR
+  - Better debugging and production monitoring support
+
+### Fixed
+- **SECURITY: Removed SSL certificate bypass** (was globally disabling HTTPS verification)
+- **SECURITY: Removed hardcoded Azure endpoint** ("scailetech.openai.azure.com")
+- **Azure OpenAI now configurable** via parameters or environment variables
+- **API version updated** from `2023-03-15-preview` to `2024-02-15-preview`
+
+### Changed
+- Test coverage increased from 19% to 22%
+- Updated tests to match new API behavior
+- Azure and regular OpenAI now use consistent patterns
+- `rank_logos()` method now supports both Azure and regular OpenAI
+
+### Migration Guide
+**If you're using regular OpenAI (default):**
+```python
+# v0.1.x
+crawler = LogoCrawler(api_key="your-key")
+
+# v0.2.0 - same, no changes needed
+crawler = LogoCrawler(api_key="your-key")
+
+# But add logging configuration:
+import logging
+logging.basicConfig(level=logging.INFO)
+```
+
+**If you're using Azure OpenAI:**
+```python
+# v0.1.x (was broken - used hardcoded endpoint)
+crawler = LogoCrawler(api_key="your-key", use_azure=True)
+
+# v0.2.0 - MUST provide endpoint
+crawler = LogoCrawler(
+    api_key="your-key",
+    use_azure=True,
+    azure_endpoint="https://yourcompany.openai.azure.com"
+)
+
+# Or use environment variable:
+# export AZURE_OPENAI_ENDPOINT=https://yourcompany.openai.azure.com
+from fede_crawl4ai.config import LogoCrawlerConfig
+config = LogoCrawlerConfig.from_env(use_azure=True)
+crawler = LogoCrawler(config=config)
+```
+
 ## [0.1.6] - 2025-11-23
 
 ### Removed

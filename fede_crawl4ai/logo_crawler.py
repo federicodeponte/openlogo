@@ -1,13 +1,13 @@
 import asyncio
 import os
 import csv
+import logging
 from typing import List, Dict, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 import hashlib
 from datetime import datetime, timedelta
 import urllib.request
 import json
-import ssl
 import base64
 import cairosvg
 import io
@@ -19,6 +19,10 @@ from PIL import Image
 from pydantic import BaseModel
 import re
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+from .config import LogoCrawlerConfig
+
+logger = logging.getLogger(__name__)
 
 # Try to import rembg for background removal (optional feature - not required)
 try:
@@ -37,18 +41,7 @@ except ImportError:
     SUPABASE_AVAILABLE = False
 
 # Removed: logo_detection module (dead code - detection strategies were never executed)
-
-
-def allowSelfSignedHttps(allowed):
-    if (
-        allowed
-        and not os.environ.get("PYTHONHTTPSVERIFY", "")
-        and getattr(ssl, "_create_unverified_context", None)
-    ):
-        ssl._create_default_https_context = ssl._create_unverified_context
-
-
-allowSelfSignedHttps(True)
+# Removed: allowSelfSignedHttps (security vulnerability - SSL verification should not be disabled)
 
 
 class LogoResult(BaseModel):
@@ -89,9 +82,9 @@ class CloudStorage:
         if SUPABASE_AVAILABLE and supabase_url and supabase_key:
             try:
                 self.client = create_client(supabase_url, supabase_key)
-                print("✅ Supabase cloud storage initialized")
+                logger.info("Supabase cloud storage initialized")
             except Exception as e:
-                print(f"⚠️  Failed to initialize Supabase: {e}")
+                logger.warning(f"Failed to initialize Supabase: {e}")
                 self.client = None
         else:
             pass  # Supabase not configured (optional feature)
@@ -116,7 +109,7 @@ class CloudStorage:
             return public_url
 
         except Exception as e:
-            print(f"⚠️  Failed to upload to cloud storage: {e}")
+            logger.warning(f"Failed to upload to cloud storage: {e}")
             return None
 
 
@@ -125,8 +118,12 @@ class LogoCrawler:
         self,
         api_key: Optional[str] = None,
         use_azure: bool = False,
+        azure_endpoint: Optional[str] = None,
+        azure_deployment: str = "gpt-4o-mini",
+        api_version: str = "2024-02-15-preview",
         supabase_url: Optional[str] = None,
         supabase_key: Optional[str] = None,
+        config: Optional[LogoCrawlerConfig] = None,
     ):
         """
         Initialize the LogoCrawler.
@@ -136,25 +133,52 @@ class LogoCrawler:
                      - For Azure OpenAI: Get your API key from https://portal.azure.com/
                      - For regular OpenAI: Get your API key from https://platform.openai.com/
             use_azure: Set to True if using Azure OpenAI, False for regular OpenAI (default: False)
+            azure_endpoint: Azure OpenAI endpoint URL (e.g., https://yourcompany.openai.azure.com)
+                           Required if use_azure=True. Can also be set via AZURE_OPENAI_ENDPOINT env var.
+            azure_deployment: Azure OpenAI deployment name (default: gpt-4o-mini)
+            api_version: Azure API version (default: 2024-02-15-preview)
             supabase_url: Optional Supabase URL for cloud storage of background-removed images
             supabase_key: Optional Supabase key for cloud storage
+            config: Optional LogoCrawlerConfig instance. If provided, overrides other parameters.
+
+        BREAKING CHANGE in v0.2.0:
+            - azure_endpoint is now required for Azure OpenAI (no hardcoded default)
+            - SSL certificate verification is now always enabled (removed allowSelfSignedHttps)
         """
-        if not api_key:
-            raise ValueError(
-                "OpenAI API key is required. "
-                "Please provide your API key when initializing LogoCrawler. "
-                "Get your API key from: https://platform.openai.com/ (regular) or https://portal.azure.com/ (Azure)"
+        # Use config if provided, otherwise create from parameters
+        if config is None:
+            config = LogoCrawlerConfig(
+                api_key=api_key or "",
+                use_azure=use_azure,
+                azure_endpoint=azure_endpoint,
+                azure_deployment=azure_deployment,
+                api_version=api_version,
+                supabase_url=supabase_url,
+                supabase_key=supabase_key,
             )
-        self.api_key = api_key
-        self.use_azure = use_azure
+
+        self.config = config
+
+        # Validate Azure configuration
+        if self.config.use_azure and not self.config.azure_endpoint:
+            raise ValueError(
+                "Azure OpenAI endpoint is required when use_azure=True. "
+                "Please provide azure_endpoint parameter or set AZURE_OPENAI_ENDPOINT environment variable. "
+                "Example: https://yourcompany.openai.azure.com"
+            )
+
+        # Backward compatibility: expose config values as instance attributes
+        self.api_key = self.config.api_key
+        self.use_azure = self.config.use_azure
 
         # Initialize image cache and cloud storage
-        self.image_cache = ImageCache()
-        self.cloud_storage = CloudStorage(supabase_url, supabase_key)
+        cache_duration = timedelta(days=self.config.cache_duration_days)
+        self.image_cache = ImageCache(cache_duration=cache_duration)
+        self.cloud_storage = CloudStorage(self.config.supabase_url, self.config.supabase_key)
 
-        # Minimum image dimensions
-        self.min_width = 32
-        self.min_height = 32
+        # Minimum image dimensions (from config)
+        self.min_width = self.config.min_width
+        self.min_height = self.config.min_height
 
         # Keywords that indicate non-company logos (social media, generic icons, etc.)
         self.non_company_logo_keywords = [
@@ -263,7 +287,7 @@ class LogoCrawler:
             # Convert back to PIL image
             return Image.open(io.BytesIO(output))
         except Exception as e:
-            print(f"Background removal failed: {e}")
+            logger.warning(f"Background removal failed: {e}")
             return image
 
     def extract_confidence_score(self, content: str) -> float:
@@ -348,7 +372,7 @@ class LogoCrawler:
         page_html: Optional[str] = None,
     ) -> Optional[LogoResult]:
         """Analyze an image using Azure OpenAI gpt-4o-mini and additional detection strategies."""
-        url = "https://scailetech.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2023-03-15-preview"
+        url = f"{self.config.azure_endpoint}/openai/deployments/{self.config.azure_deployment}/chat/completions?api-version={self.config.api_version}"
 
         messages = [
             {
@@ -375,53 +399,53 @@ class LogoCrawler:
         headers = {"Content-Type": "application/json", "api-key": self.api_key}
 
         try:
-            print(f"\nAnalyzing image: {image_url}")
+            logger.debug(f"Analyzing image: {image_url}")
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=data, headers=headers) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        print(f"API Error ({response.status}): {error_text}")
+                        logger.error(f"API Error ({response.status}): {error_text}")
                         return None
 
                     try:
                         result = await response.json()
-                        # print(f"API Response: {json.dumps(result, indent=2)}")  # Verbose - commented out
+                        logger.debug(f"API Response received for {image_url}")
                     except json.JSONDecodeError as e:
-                        print(f"Error decoding JSON response: {e}")
+                        logger.error(f"Error decoding JSON response: {e}")
                         response_text = await response.text()
-                        print(f"Raw response: {response_text}")
+                        logger.debug(f"Raw response: {response_text}")
                         return None
 
                     if not result.get("choices"):
-                        print(f"Warning: No 'choices' in API response")
+                        logger.warning(f"No 'choices' in API response for {image_url}")
                         return None
 
                     if not result["choices"]:
-                        print(f"Warning: Empty 'choices' array in API response")
+                        logger.warning(f"Empty 'choices' array in API response for {image_url}")
                         return None
 
                     if not result["choices"][0].get("message"):
-                        print(f"Warning: No 'message' in first choice")
+                        logger.warning(f"No 'message' in first choice for {image_url}")
                         return None
 
                     if not result["choices"][0]["message"].get("content"):
-                        print(f"Warning: No 'content' in message")
+                        logger.warning(f"No 'content' in message for {image_url}")
                         return None
 
                     content = result["choices"][0]["message"]["content"]
-                    # print(f"Content from API: {content}")  # Verbose - commented out
+                    logger.debug(f"Content from API: {content[:100]}...")
 
                     if content.lower() == "null":
-                        print("Content is 'null', skipping image")
+                        logger.debug(f"Content is 'null', skipping image: {image_url}")
                         return None
 
                     # Extract confidence score using the new method
                     confidence = self.extract_confidence_score(content)
-                    # print(f"Extracted confidence score: {confidence}")  # Verbose - commented out
+                    logger.debug(f"Extracted confidence score: {confidence}")
 
                     # Extract description using the new method
                     description = self.extract_description(content)
-                    # print(f"Extracted description: {description}")  # Verbose - commented out
+                    logger.debug(f"Extracted description: {description[:50]}...")
 
                     # Use GPT-4o-mini confidence as rank score (simple, proven approach)
                     rank_score = confidence
@@ -439,11 +463,11 @@ class LogoCrawler:
                     )
 
         except aiohttp.ClientError as e:
-            print(f"HTTP Error analyzing image {image_url}: {e}")
+            logger.error(f"HTTP Error analyzing image {image_url}: {e}")
             return None
         except Exception as e:
-            print(f"Error analyzing image {image_url}: {e}")
-            print(f"Error type: {type(e)}")
+            logger.error(f"Error analyzing image {image_url}: {e}")
+            logger.error(f"Error type: {type(e)}")
             import traceback
 
             traceback.print_exc()
@@ -485,53 +509,53 @@ class LogoCrawler:
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
         try:
-            print(f"\nAnalyzing image: {image_url}")
+            logger.debug(f"Analyzing image: {image_url}")
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=data, headers=headers) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        print(f"API Error ({response.status}): {error_text}")
+                        logger.error(f"API Error ({response.status}): {error_text}")
                         return None
 
                     try:
                         result = await response.json()
-                        # print(f"API Response: {json.dumps(result, indent=2)}")  # Verbose - commented out
+                        logger.debug(f"API Response received for {image_url}")
                     except json.JSONDecodeError as e:
-                        print(f"Error decoding JSON response: {e}")
+                        logger.error(f"Error decoding JSON response: {e}")
                         response_text = await response.text()
-                        print(f"Raw response: {response_text}")
+                        logger.debug(f"Raw response: {response_text}")
                         return None
 
                     if not result.get("choices"):
-                        print(f"Warning: No 'choices' in API response")
+                        logger.warning(f"No 'choices' in API response for {image_url}")
                         return None
 
                     if not result["choices"]:
-                        print(f"Warning: Empty 'choices' array in API response")
+                        logger.warning(f"Empty 'choices' array in API response for {image_url}")
                         return None
 
                     if not result["choices"][0].get("message"):
-                        print(f"Warning: No 'message' in first choice")
+                        logger.warning(f"No 'message' in first choice for {image_url}")
                         return None
 
                     if not result["choices"][0]["message"].get("content"):
-                        print(f"Warning: No 'content' in message")
+                        logger.warning(f"No 'content' in message for {image_url}")
                         return None
 
                     content = result["choices"][0]["message"]["content"]
-                    # print(f"Content from API: {content}")  # Verbose - commented out
+                    logger.debug(f"Content from API: {content[:100]}...")
 
                     if content.lower() == "null":
-                        print("Content is 'null', skipping image")
+                        logger.debug(f"Content is 'null', skipping image: {image_url}")
                         return None
 
                     # Extract confidence score using the new method
                     confidence = self.extract_confidence_score(content)
-                    # print(f"Extracted confidence score: {confidence}")  # Verbose - commented out
+                    logger.debug(f"Extracted confidence score: {confidence}")
 
                     # Extract description using the new method
                     description = self.extract_description(content)
-                    # print(f"Extracted description: {description}")  # Verbose - commented out
+                    logger.debug(f"Extracted description: {description[:50]}...")
 
                     # Use GPT-4o-mini confidence as rank score (simple, proven approach)
                     rank_score = confidence
@@ -549,11 +573,11 @@ class LogoCrawler:
                     )
 
         except aiohttp.ClientError as e:
-            print(f"HTTP Error analyzing image {image_url}: {e}")
+            logger.error(f"HTTP Error analyzing image {image_url}: {e}")
             return None
         except Exception as e:
-            print(f"Error analyzing image {image_url}: {e}")
-            print(f"Error type: {type(e)}")
+            logger.error(f"Error analyzing image {image_url}: {e}")
+            logger.error(f"Error type: {type(e)}")
             import traceback
 
             traceback.print_exc()
@@ -582,7 +606,7 @@ class LogoCrawler:
                             png_data = cairosvg.svg2png(bytestring=image_data)
                             image = Image.open(io.BytesIO(png_data))
                         except Exception as e:
-                            print(f"Error converting SVG {image_url}: {e}")
+                            logger.error(f"Error converting SVG {image_url}: {e}")
                             return None
                     else:
                         image = Image.open(io.BytesIO(image_data))
@@ -608,7 +632,7 @@ class LogoCrawler:
                     return result
 
         except Exception as e:
-            print(f"Error analyzing image {image_url}: {e}")
+            logger.error(f"Error analyzing image {image_url}: {e}")
             return None
 
     def extract_background_images(self, soup: BeautifulSoup) -> List[str]:
@@ -678,8 +702,7 @@ class LogoCrawler:
                             # Skip non-image URLs
                             if not any(
                                 img_url.lower().endswith(ext)
-                                for ext in [".jpg", ".jpeg", ".png", ".gif", ".svg"]
-                            ):
+                                for ext in [".jpg", ".jpeg", ".png", ".gif", ".svg"]):
                                 continue
 
                             # Analyze image
@@ -704,7 +727,7 @@ class LogoCrawler:
                                     await process_page(absolute_url)
 
             except Exception as e:
-                print(f"Error processing page {url}: {e}")
+                logger.error(f"Error processing page {url}: {e}")
 
         # Start crawling from the initial URL
         processed_urls.add(start_url)
@@ -724,8 +747,8 @@ class LogoCrawler:
         # Save results to file if output_file is specified
         if output_file:
             try:
-                print(f"\nPreparing to save results...")
-                print(f"Output file path: {output_file}")
+                logger.debug(f"\nPreparing to save results...")
+                logger.debug(f"Output file path: {output_file}")
 
                 # Convert results to dict format
                 results_dict = []
@@ -742,18 +765,18 @@ class LogoCrawler:
                     }
                     results_dict.append(result_dict)
 
-                print(f"Converted {len(results_dict)} results to JSON format")
+                logger.info(f"Converted {len(results_dict)} results to JSON format")
 
                 # Create output directory if needed
                 output_path = Path(output_file)
                 if output_path.parent != Path("."):
-                    print(f"Creating directory: {output_path.parent}")
+                    logger.debug(f"Creating directory: {output_path.parent}")
                     output_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # Save to file
-                print(f"Writing results to file: {output_path}")
+                logger.debug(f"Writing results to file: {output_path}")
                 json_data = json.dumps(results_dict, indent=2)
-                print(f"JSON data length: {len(json_data)} bytes")
+                logger.debug(f"JSON data length: {len(json_data)} bytes")
 
                 with open(output_path, "w") as f:
                     f.write(json_data)
@@ -762,13 +785,13 @@ class LogoCrawler:
 
                 # Verify file was written
                 if output_path.exists():
-                    print(f"File exists after writing: {output_path}")
-                    print(f"File size: {output_path.stat().st_size} bytes")
+                    logger.debug(f"File exists after writing: {output_path}")
+                    logger.debug(f"File size: {output_path.stat().st_size} bytes")
                 else:
-                    print(f"Warning: File does not exist after writing: {output_path}")
+                    logger.warning(f"Warning: File does not exist after writing: {output_path}")
 
             except Exception as e:
-                print(f"Error saving results to file: {e}")
+                logger.error(f"Error saving results to file: {e}")
                 import traceback
 
                 traceback.print_exc()
@@ -817,7 +840,11 @@ class LogoCrawler:
         if not logos:
             return []
 
-        url = "https://scailetech.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2023-03-15-preview"
+        # Use Azure or regular OpenAI based on configuration
+        if self.use_azure:
+            url = f"{self.config.azure_endpoint}/openai/deployments/{self.config.azure_deployment}/chat/completions?api-version={self.config.api_version}"
+        else:
+            url = "https://api.openai.com/v1/chat/completions"
 
         # Prepare the prompt with all logo information
         logo_descriptions = []
@@ -840,13 +867,17 @@ class LogoCrawler:
 
         data = {"messages": messages, "max_tokens": 500}
 
-        headers = {"Content-Type": "application/json", "api-key": self.api_key}
+        # Use appropriate headers for Azure vs regular OpenAI
+        if self.use_azure:
+            headers = {"Content-Type": "application/json", "api-key": self.api_key}
+        else:
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=data, headers=headers) as response:
                     if response.status != 200:
-                        print(f"Error ranking logos: {await response.text()}")
+                        logger.error(f"Error ranking logos: {await response.text()}")
                         return logos
 
                     result = await response.json()
@@ -866,7 +897,7 @@ class LogoCrawler:
                     return sorted(logos, key=lambda x: x.rank_score, reverse=True)
 
         except Exception as e:
-            print(f"Error during logo ranking: {e}")
+            logger.error(f"Error during logo ranking: {e}")
             return logos
 
     async def crawl_website(self, url: str) -> List[LogoResult]:
@@ -907,7 +938,7 @@ class LogoCrawler:
                             result.is_header = image_url in header_images
                             results.append(result)
 
-                    print(f"Crawl completed. Found {len(results)} results\n")
+                    logger.info(f"Crawl completed. Found {len(results)} results\n")
 
                     if results:
                         # Deduplicate by image hash and rank by confidence
@@ -926,31 +957,28 @@ class LogoCrawler:
 
                         # Sort by rank score (descending)
                         ranked_results = sorted(
-                            unique_results, key=lambda x: x.rank_score, reverse=True
-                        )
+                            unique_results, key=lambda x: x.rank_score, reverse=True)
 
-                        print(
-                            f"\nFound {len(ranked_results)} unique logo(s) (ranked by likelihood):\n"
-                        )
+                        logger.info(f"\nFound {len(ranked_results)} unique logo(s) (ranked by likelihood):\n")
                         for result in ranked_results:
                             location = "header/navigation" if result.is_header else "main content"
-                            print(f"URL: {result.url}")
-                            print(f"Location: {location}")
-                            print(f"Confidence: {result.confidence}")
-                            print(f"Rank Score: {result.rank_score:.2f}")
-                            print(f"Description: {result.description}")
-                            print(f"Page URL: {result.page_url}")
-                            print("-" * 50 + "\n")
+                            logger.info(f"URL: {result.url}")
+                            logger.info(f"Location: {location}")
+                            logger.info(f"Confidence: {result.confidence}")
+                            logger.info(f"Rank Score: {result.rank_score:.2f}")
+                            logger.info(f"Description: {result.description}")
+                            logger.info(f"Page URL: {result.page_url}")
+                            logger.info("-" * 50 + "\n")
 
                         return ranked_results
 
                     return []
 
         except aiohttp.ClientError as e:
-            print(f"Error crawling website: {e}")
+            logger.error(f"Error crawling website: {e}")
             return []
         except Exception as e:
-            print(f"Unexpected error: {e}")
+            logger.error(f"Unexpected error: {e}")
             return []
 
     def detect_url_column(self, csv_file_path: str) -> Tuple[str, List[str]]:
@@ -1038,22 +1066,22 @@ class LogoCrawler:
         Returns:
             Dictionary mapping URLs to their logo results
         """
-        print(f"Processing CSV file: {csv_file_path}")
+        logger.info(f"Processing CSV file: {csv_file_path}")
 
         # Detect URL column
         url_column, urls = self.detect_url_column(csv_file_path)
 
         if confirm_header:
-            print(f"\nDetected URL column: '{url_column}'")
-            print(f"Found {len(urls)} URLs to process:")
+            logger.info(f"\nDetected URL column: '{url_column}'")
+            logger.info(f"Found {len(urls)} URLs to process:")
             for i, url in enumerate(urls[:5], 1):  # Show first 5 URLs
-                print(f"  {i}. {url}")
+                logger.info(f"  {i}. {url}")
             if len(urls) > 5:
-                print(f"  ... and {len(urls) - 5} more")
+                logger.info(f"  ... and {len(urls) - 5} more")
 
             response = input("\nProceed with this column? (y/n): ").lower().strip()
             if response not in ["y", "yes"]:
-                print("Processing cancelled.")
+                logger.info("Processing cancelled.")
                 return {}
 
         # Create output directory
@@ -1096,14 +1124,14 @@ class LogoCrawler:
                         for i, result in enumerate(results):
                             # Only process images with confidence score > 0.8
                             if result.confidence <= 0.8:
-                                print(
+                                logger.info(
                                     f"Skipping logo with low confidence ({result.confidence}): {result.url}"
                                 )
                                 continue
 
                             # Only process company logos (not social media, generic icons, etc.)
                             if not self.is_company_logo(result.description, result.url):
-                                print(
+                                logger.info(
                                     f"Skipping non-company logo: {result.url} - {result.description}"
                                 )
                                 continue
@@ -1174,7 +1202,7 @@ class LogoCrawler:
                                                 "cloud_storage_url": None,
                                             }
                             except Exception as e:
-                                print(
+                                logger.info(
                                     f"Warning: Could not save background-removed image for {result.url}: {e}"
                                 )
                                 result_dict = {
@@ -1198,24 +1226,21 @@ class LogoCrawler:
                         with open(filepath, "w") as f:
                             json.dump(results_dict, f, indent=2)
 
-                        print(
-                            f"\n✅ {url}: Found {len(results)} logos, saved {len(results_dict)} company logos (>0.8 confidence) to {filepath}"
-                        )
+                        logger.info(f"\n✅ {url}: Found {len(results)} logos, saved {len(results_dict)} company logos (>0.8 confidence) to {filepath}")
                         if results_dict:
-                            print(f"📁 Background-removed images saved to: {images_dir}")
+                            logger.info(f"📁 Background-removed images saved to: {images_dir}")
                             if any(r.get("cloud_storage_url") for r in results_dict):
-                                print(f"☁️  Images uploaded to cloud storage")
+                                logger.info(f"☁️  Images uploaded to cloud storage")
                         else:
-                            print(
-                                f"⚠️  No company logos found (all below 0.8 threshold or non-company logos)"
-                            )
+                            logger.info(
+                                f"⚠️  No company logos found (all below 0.8 threshold or non-company logos)")
                     else:
-                        print(f"\n❌ {url}: No logos found")
+                        logger.info(f"\n❌ {url}: No logos found")
 
                     all_results[url] = results
 
                 except Exception as e:
-                    print(f"\n❌ {url}: Error - {e}")
+                    logger.info(f"\n❌ {url}: Error - {e}")
                     all_results[url] = []
 
                 progress.advance(task)
@@ -1254,12 +1279,12 @@ class LogoCrawler:
         with open(summary_file, "w") as f:
             json.dump(summary, f, indent=2)
 
-        print(f"\n🎉 Batch processing complete!")
-        print(
+        logger.info(f"\n🎉 Batch processing complete!")
+        logger.info(
             f"📊 Summary: {summary['successful_crawls']}/{summary['total_urls']} websites processed successfully"
         )
-        print(f"📁 Results saved to: {output_path}")
-        print(f"📋 Summary report: {summary_file}")
-        print(f"📸 Background-removed images saved in subdirectories")
+        logger.info(f"📁 Results saved to: {output_path}")
+        logger.info(f"📋 Summary report: {summary_file}")
+        logger.info(f"📸 Background-removed images saved in subdirectories")
 
         return all_results
