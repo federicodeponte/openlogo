@@ -4,8 +4,11 @@ A web crawler for logo detection using gpt-4o-mini. This tool crawls websites an
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://github.com/federicodeponte/crawl4logo/workflows/Tests/badge.svg)](https://github.com/federicodeponte/crawl4logo/actions)
+[![Tests](https://github.com/federicodeponte/crawl4logo/actions/workflows/test.yml/badge.svg)](https://github.com/federicodeponte/crawl4logo/actions)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Development Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/federicodeponte/crawl4logo)
+
+> **⚠️ Status: Alpha** - This project is in early development. Test coverage is currently at 19%. Use with caution in production environments.
 
 ## Features
 
@@ -104,9 +107,31 @@ The tool generates a JSON file containing:
 - Rank score
 - Detection scores (if available)
 
+## Testing
+
+This project uses pytest for testing. Current test coverage is **19%**.
+
+```bash
+# Run tests
+pytest tests/
+
+# Run with coverage report
+pytest tests/ --cov=fede_crawl4ai --cov-report=term-missing
+```
+
+**Test Status:**
+- ✅ Unit tests: 11 tests covering core utilities
+- ✅ Integration tests: 1 test (mocked OpenAI responses)
+- ⚠️ Async/OpenAI integration: Not yet tested
+- ⚠️ E2E tests: Not yet implemented
+
+Contributions to improve test coverage are especially welcome!
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 

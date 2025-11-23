@@ -33,6 +33,8 @@ results.json
 test_results_*.json
 output/
 debug_output.txt
+scaile_results.json
+results_city_map.json
 
 # API keys and secrets
 *.key
