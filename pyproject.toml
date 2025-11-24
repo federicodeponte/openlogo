@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crawl4logo"
-version = "0.2.0"
+version = "0.3.0"
 description = "A web crawler for logo detection using GPT-4o-mini vision capabilities"
 authors = [
     {name = "Federico De Ponte", email = "federico.deponte@gmail.com"},
