@@ -19,6 +19,7 @@ import re
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 from .config import LogoCrawlerConfig
+from .models import LogoResult
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +41,6 @@ except ImportError:
 
 # Removed: logo_detection module (dead code - detection strategies were never executed)
 # Removed: allowSelfSignedHttps (security vulnerability - SSL verification should not be disabled)
-
-
-class LogoResult(BaseModel):
-    url: str
-    confidence: float
-    description: str
-    page_url: str
-    image_hash: str
-    timestamp: datetime
-    is_header: bool = False
-    rank_score: float = 0.0
-    detection_scores: Dict[str, Dict[str, float]] = {}
 
 
 class ImageCache:
