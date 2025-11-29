@@ -826,7 +826,7 @@ class LogoCrawler:
                     
                     # Extract ranking scores using regex
                     for i, logo in enumerate(logos, 1):
-                        pattern = f"Logo {i}.*?score:?\s*(\d*\.?\d+)"
+                        pattern = rf"Logo {i}.*?score:?\s*(\d*\.?\d+)"
                         match = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
                         if match:
                             try:
