@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "fede-crawl4ai"
-version = "0.1.0"
-description = "A web crawler for logo detection using gpt-4o-mini. Note: Requires Cairo system library to be installed separately."
+name = "crawl4logo"
+version = "0.2.0"
+description = "Web crawler for logo detection using AI (GPT-4o-mini). Requires Cairo system library."
 authors = [
     {name = "Federico De Ponte", email = "federico.deponte@gmail.com"},
 ]
@@ -13,20 +13,18 @@ dependencies = [
     "aiohttp>=3.8.0",
     "beautifulsoup4>=4.9.3",
     "Pillow>=8.0.0",
-    "pydantic>=1.8.0",
+    "pydantic>=2.0.0",
     "rich>=10.0.0",
     "cairosvg>=2.7.0",
-    "python-magic",
-    "extcolors",
-    "pytesseract",
-    "opencv-python",
-    "tweepy",
-    "jsonschema",
-    "scikit-learn",
-    "imagehash",
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+ai = ["openai>=1.0.0"]
+rembg = ["rembg>=2.0.0"]
+supabase = ["supabase>=2.0.0"]
+all = ["openai>=1.0.0", "rembg>=2.0.0", "supabase>=2.0.0"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["fede_crawl4ai"] 
+packages = ["src/crawl4logo"]

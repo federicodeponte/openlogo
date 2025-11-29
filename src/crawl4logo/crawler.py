@@ -38,7 +38,7 @@ except ImportError:
     print("Warning: supabase not installed. Cloud storage will be skipped.")
     print("Install with: pip install supabase")
 
-from .logo_detection import LogoDetectionStrategies, LogoCandidate
+from .detection import LogoDetectionStrategies, LogoCandidate
 
 def allowSelfSignedHttps(allowed):
     if allowed and not os.environ.get('PYTHONHTTPSVERIFY', '') and getattr(ssl, '_create_unverified_context', None):
