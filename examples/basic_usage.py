@@ -1,5 +1,5 @@
 """
-Basic usage example for crawl4logo.
+Basic usage example for openlogo.
 
 Prerequisites:
 1. Install: pip install -e .
@@ -9,7 +9,7 @@ Prerequisites:
 
 import asyncio
 import os
-from crawl4logo import LogoCrawler
+from openlogo import LogoCrawler
 
 
 async def main():
@@ -39,4 +39,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 

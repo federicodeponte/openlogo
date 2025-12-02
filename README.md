@@ -1,4 +1,4 @@
-# crawl4logo
+# openlogo
 
 A web crawler for logo detection using GPT-4o-mini vision. Crawls websites and identifies logos with confidence scores.
 
@@ -8,6 +8,7 @@ A web crawler for logo detection using GPT-4o-mini vision. Crawls websites and i
 
 - 🔍 Async web crawling with browser-like headers (avoids 403 blocks)
 - 🤖 Logo detection using GPT-4o-mini vision
+- 🔄 Meta refresh redirect support (follows `<meta http-equiv="refresh">` redirects)
 - 🖼️ SVG to PNG conversion
 - 📊 Confidence scores and descriptions
 - 💾 Image caching
@@ -28,7 +29,10 @@ sudo apt-get install libcairo2-dev tesseract-ocr libmagic1
 ### Python Package
 
 ```bash
-# Basic install
+# From PyPI
+pip install openlogo
+
+# Basic install (from source)
 pip install -e .
 
 # With AI client (OpenAI)
@@ -46,12 +50,12 @@ pip install -e ".[dev]"
 ```python
 import asyncio
 import os
-from crawl4logo import LogoCrawler
+from openlogo import LogoCrawler
 
 async def main():
     crawler = LogoCrawler(api_key=os.environ["OPENAI_API_KEY"])
     results = await crawler.crawl_website("https://stripe.com")
-    
+
     for logo in results:
         print(f"{logo.url} - {logo.confidence:.0f}% confidence")
 
@@ -63,9 +67,9 @@ See `examples/basic_usage.py` for a complete example.
 ## Project Structure
 
 ```
-crawl4logo/
+openlogo/
 ├── src/
-│   └── crawl4logo/
+│   └── openlogo/
 │       ├── __init__.py
 │       ├── crawler.py      # Main LogoCrawler class
 │       └── detection.py    # Logo detection strategies
@@ -106,6 +110,15 @@ LogoResult(
     detection_scores={...}
 )
 ```
+
+## Changelog
+
+### v0.3.0
+- Renamed package from `crawl4logo` to `openlogo`
+- Added meta refresh redirect support (handles sites that use `<meta http-equiv="refresh">` instead of HTTP redirects)
+
+### v0.2.0
+- Initial public release
 
 ## License
 

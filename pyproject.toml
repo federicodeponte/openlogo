@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "crawl4logo"
-version = "0.2.0"
-description = "Web crawler for logo detection using AI (GPT-4o-mini). Requires Cairo system library."
+name = "openlogo"
+version = "0.3.0"
+description = "Web crawler for logo detection using AI (GPT-4o-mini). Supports meta refresh redirects. Requires Cairo system library."
 authors = [
     {name = "Federico De Ponte", email = "federico.deponte@gmail.com"},
 ]
@@ -37,7 +37,7 @@ all = ["openai>=1.0.0", "rembg>=2.0.0", "supabase>=2.0.0"]
 dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/crawl4logo"]
+packages = ["src/openlogo"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/crawl4logo"]
+include = ["src/openlogo"]

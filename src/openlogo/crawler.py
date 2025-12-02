@@ -38,6 +38,37 @@ except ImportError:
 
 from .detection import LogoDetectionStrategies, LogoCandidate
 
+
+def extract_meta_refresh_url(html: str, base_url: str) -> Optional[str]:
+    """Extract redirect URL from meta http-equiv="refresh" tag.
+
+    Handles patterns like:
+    - <meta http-equiv="refresh" content="0; URL=/de-de/">
+    - <meta content="0;url=https://example.com" http-equiv="refresh">
+
+    Args:
+        html: The HTML content to parse
+        base_url: The base URL for resolving relative URLs
+
+    Returns:
+        The redirect URL if found, None otherwise
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    meta_refresh = soup.find("meta", attrs={"http-equiv": re.compile(r"refresh", re.I)})
+
+    if meta_refresh:
+        content = meta_refresh.get("content", "")
+        match = re.search(r"url\s*=\s*([^\s;\"']+)", content, re.IGNORECASE)
+        if match:
+            redirect_url = match.group(1).strip("'\"")
+            if redirect_url.startswith("/"):
+                return urljoin(base_url, redirect_url)
+            elif not redirect_url.startswith(("http://", "https://")):
+                return urljoin(base_url, redirect_url)
+            return redirect_url
+    return None
+
+
 # Browser-like headers to avoid 403 blocks from websites
 BROWSER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -846,8 +877,21 @@ class LogoCrawler:
                 async with session.get(url, headers=BROWSER_HEADERS) as response:
                     if response.status != 200:
                         return []
-                    
+
                     html = await response.text()
+
+                    # Check for meta refresh redirect (not followed by aiohttp)
+                    # This handles sites like helpify.net that use <meta http-equiv="refresh">
+                    if len(html) < 500:  # Only check short pages that might be redirect stubs
+                        meta_refresh_url = extract_meta_refresh_url(html, url)
+                        if meta_refresh_url:
+                            print(f"Found meta refresh redirect to: {meta_refresh_url}")
+                            async with session.get(meta_refresh_url, headers=BROWSER_HEADERS) as redirect_response:
+                                if redirect_response.status == 200:
+                                    html = await redirect_response.text()
+                                    url = str(redirect_response.url)
+                                    print(f"Followed meta refresh to: {url}")
+
                     soup = BeautifulSoup(html, 'html.parser')
                     
                     # First, get header/nav images
