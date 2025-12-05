@@ -1,19 +1,26 @@
 # openlogo
 
-A web crawler for logo detection using GPT-4o-mini vision. **Prioritizes Clearbit API** for instant logos (~100ms), falls back to AI-powered crawling for companies not in Clearbit's database.
+A web crawler for logo detection using GPT-4o-mini vision. Uses a **three-tier fallback system**: Clearbit API → Google Favicon → AI-powered crawling.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
-- ⚡ **Clearbit API priority** - Instant logos for established companies (free, ~100ms)
+- ⚡ **Clearbit API priority** - Instant high-quality logos for established companies (free, ~100ms)
+- 🔄 **Google Favicon fallback** - Good coverage for sites not in Clearbit (~100ms)
+- 🤖 **AI-powered crawling** - GPT-4o-mini vision for complete coverage (slower)
 - 🔍 Async web crawling with browser-like headers (avoids 403 blocks)
-- 🤖 Logo detection using GPT-4o-mini vision (fallback)
 - 🔄 Meta refresh redirect support (follows `<meta http-equiv="refresh">` redirects)
 - 🖼️ SVG to PNG conversion
 - 📊 Confidence scores and descriptions
 - 💾 Image caching
 - 🎯 Header/nav logo prioritization
+
+## Logo Resolution Order
+
+1. **Clearbit** (confidence: 0.95) - Best quality, ~100ms, covers most established companies
+2. **Google Favicon** (confidence: 0.75) - Good coverage, ~100ms, 128px icons
+3. **AI Crawler** (confidence: varies) - Complete coverage, slower, uses GPT-4o-mini
 
 ## Installation
 
@@ -113,6 +120,13 @@ LogoResult(
 ```
 
 ## Changelog
+
+### v0.5.0
+- **Google Favicon fallback** - Added `try_google_favicon()` as middle-tier between Clearbit and AI crawler
+- Three-tier resolution: Clearbit → Google Favicon → AI Crawler
+- Added `skip_google_favicon` parameter to `crawl_website()`
+- Exported `try_google_favicon()` for direct use
+- Skips generic Google globe icons (< 1KB)
 
 ### v0.4.0
 - **Clearbit API priority** - Now tries Clearbit first for instant logos (~100ms, free)

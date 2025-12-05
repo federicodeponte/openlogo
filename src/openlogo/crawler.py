@@ -66,6 +66,49 @@ async def try_clearbit_logo(domain: str, website_url: str) -> Optional["LogoResu
     return None
 
 
+async def try_google_favicon(domain: str, website_url: str, size: int = 128) -> Optional["LogoResult"]:
+    """Try to get logo from Google's favicon service (fallback for Clearbit).
+    
+    Google's favicon service provides favicons for most websites.
+    Quality is lower than Clearbit but coverage is much higher.
+    Returns None if favicon is not found or is a generic placeholder.
+    
+    Args:
+        domain: The domain to get favicon for (e.g., "example.com")
+        website_url: The full website URL for metadata
+        size: Icon size (16, 32, 64, 128, 256)
+    """
+    favicon_url = f"https://www.google.com/s2/favicons?domain={domain}&sz={size}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(favicon_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status == 200:
+                    # Check if we got actual content (not a generic globe icon)
+                    content = await resp.read()
+                    content_length = len(content)
+                    
+                    # Google returns a ~726 byte generic globe icon for unknown domains
+                    # Skip if content is too small (likely generic icon)
+                    if content_length < 1000:
+                        print(f"ℹ️  Google favicon too small for {domain} ({content_length} bytes), likely generic icon")
+                        return None
+                    
+                    print(f"✅ Google favicon found for {domain}: {favicon_url} ({content_length} bytes)")
+                    return LogoResult(
+                        url=favicon_url,
+                        confidence=0.75,  # Lower confidence than Clearbit
+                        description="Favicon from Google Favicon Service",
+                        page_url=website_url,
+                        image_hash=hashlib.md5(content).hexdigest(),
+                        timestamp=datetime.now(),
+                        is_header=True,
+                        rank_score=1.5,  # Lower rank than Clearbit
+                    )
+    except Exception as e:
+        print(f"ℹ️  Google favicon unavailable for {domain}: {e}")
+    return None
+
+
 def extract_meta_refresh_url(html: str, base_url: str) -> Optional[str]:
     """Extract redirect URL from meta http-equiv="refresh" tag.
 
@@ -897,14 +940,15 @@ class LogoCrawler:
             print(f"Error during logo ranking: {e}")
             return logos
 
-    async def crawl_website(self, url: str, skip_clearbit: bool = False) -> List[LogoResult]:
+    async def crawl_website(self, url: str, skip_clearbit: bool = False, skip_google_favicon: bool = False) -> List[LogoResult]:
         """Crawl a website and find logos.
         
         Args:
             url: Website URL to crawl
-            skip_clearbit: If True, skip Clearbit API and go straight to crawling
+            skip_clearbit: If True, skip Clearbit API
+            skip_google_favicon: If True, skip Google Favicon fallback
         """
-        # Extract domain for Clearbit lookup
+        # Extract domain for logo lookup
         domain = urlparse(url).netloc.replace("www.", "")
         
         # Try Clearbit first (free, fast, reliable for established companies)
@@ -913,7 +957,15 @@ class LogoCrawler:
             if clearbit_result:
                 print(f"🚀 Using Clearbit logo for {domain} (skipping crawl)")
                 return [clearbit_result]
-            print(f"ℹ️  Clearbit unavailable for {domain}, falling back to crawler...")
+            print(f"ℹ️  Clearbit unavailable for {domain}")
+        
+        # Try Google Favicon as fallback (good coverage, lower quality)
+        if not skip_google_favicon:
+            favicon_result = await try_google_favicon(domain, url)
+            if favicon_result:
+                print(f"🔄 Using Google favicon for {domain} (skipping crawl)")
+                return [favicon_result]
+            print(f"ℹ️  Google favicon unavailable for {domain}, falling back to crawler...")
         
         try:
             async with aiohttp.ClientSession() as session:
