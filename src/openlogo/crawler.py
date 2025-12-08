@@ -153,11 +153,11 @@ BROWSER_HEADERS = {
     "Sec-Ch-Ua-Platform": '"macOS"',
 }
 
-def allowSelfSignedHttps(allowed):
-    if allowed and not os.environ.get('PYTHONHTTPSVERIFY', '') and getattr(ssl, '_create_unverified_context', None):
-        ssl._create_default_https_context = ssl._create_unverified_context
-
-allowSelfSignedHttps(True)
+# Use secure SSL context by default - removed insecure SSL bypass
+# If you need to handle self-signed certificates, use proper certificate validation
+def create_secure_ssl_context():
+    """Create a secure SSL context with proper certificate verification."""
+    return ssl.create_default_context()
 
 class LogoResult(BaseModel):
     url: str
